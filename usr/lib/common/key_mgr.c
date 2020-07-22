@@ -93,6 +93,14 @@ CK_RV key_mgr_generate_key(STDLL_TokData_t *tokdata,
 
         subclass = CKK_DES;
         break;
+    case CKM_DES2_KEY_GEN:
+        if (subclass != 0 && subclass != CKK_DES2) {
+            TRACE_ERROR("%s\n", ock_err(ERR_TEMPLATE_INCONSISTENT));
+            return CKR_TEMPLATE_INCONSISTENT;
+        }
+
+        subclass = CKK_DES2;
+        break;
     case CKM_DES3_KEY_GEN:
         if (subclass != 0 && subclass != CKK_DES3) {
             TRACE_ERROR("%s\n", ock_err(ERR_TEMPLATE_INCONSISTENT));
@@ -162,6 +170,9 @@ CK_RV key_mgr_generate_key(STDLL_TokData_t *tokdata,
     case CKM_DES_KEY_GEN:
         rc = ckm_des_key_gen(tokdata, key_obj->template);
         break;
+    case CKM_DES2_KEY_GEN:
+        rc = ckm_des2_key_gen(tokdata, key_obj->template);
+        break;
     case CKM_DES3_KEY_GEN:
         rc = ckm_des3_key_gen(tokdata, key_obj->template);
         break;
@@ -217,7 +228,9 @@ CK_RV key_mgr_generate_key(STDLL_TokData_t *tokdata,
     if (flag == TRUE) {
         flag = *(CK_BBOOL *) attr->pValue;
 
-        rc = build_attribute(CKA_NEVER_EXTRACTABLE, &true, sizeof(CK_BBOOL),
+        flag = flag ? false : true;
+
+        rc = build_attribute(CKA_NEVER_EXTRACTABLE, &flag, sizeof(CK_BBOOL),
                              &new_attr);
         if (rc != CKR_OK) {
             TRACE_DEVEL("build_attribute failed\n");
@@ -679,6 +692,7 @@ CK_RV key_mgr_wrap_key(STDLL_TokData_t *tokdata,
             goto done;
         }
         break;
+    case CKK_DES2:
     case CKK_DES3:
         rc = des3_wrap_get_data(key2_obj->template, length_only, &data,
                                 &data_len);

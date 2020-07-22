@@ -718,7 +718,8 @@ CK_RV priv_key_validate_attribute(STDLL_TokData_t *tokdata, TEMPLATE *tmpl,
             CK_BBOOL value;
 
             value = *(CK_BBOOL *) attr->pValue;
-            if ((mode != MODE_CREATE && mode != MODE_KEYGEN) &&
+            if ((mode != MODE_CREATE && mode != MODE_KEYGEN &&
+                 mode != MODE_UNWRAP) &&
                 value != FALSE) {
                 TRACE_ERROR("%s\n", ock_err(ERR_ATTRIBUTE_READ_ONLY));
                 return CKR_ATTRIBUTE_READ_ONLY;
@@ -947,6 +948,9 @@ CK_RV secret_key_unwrap(STDLL_TokData_t *tokdata,
     case CKK_DES:
         rc = des_unwrap(tokdata, tmpl, data, data_len, fromend, isopaque);
         break;
+    case CKK_DES2:
+        rc = des2_unwrap(tokdata, tmpl, data, data_len, fromend, isopaque);
+        break; 
     case CKK_DES3:
         rc = des3_unwrap(tokdata, tmpl, data, data_len, fromend, isopaque);
         break;
@@ -1068,8 +1072,9 @@ CK_RV secret_key_validate_attribute(STDLL_TokData_t *tokdata, TEMPLATE *tmpl,
             // the unwrap routine will automatically set extractable to TRUE
             //
             value = *(CK_BBOOL *) attr->pValue;
+
             if ((mode != MODE_CREATE && mode != MODE_DERIVE &&
-                 mode != MODE_KEYGEN) && (value != FALSE)) {
+                 mode != MODE_KEYGEN && mode != MODE_UNWRAP) && (value != FALSE)) {
                 TRACE_ERROR("%s\n", ock_err(ERR_ATTRIBUTE_READ_ONLY));
                 return CKR_ATTRIBUTE_READ_ONLY;
             }
@@ -4837,6 +4842,67 @@ CK_RV des3_set_default_attributes(TEMPLATE *tmpl, CK_ULONG mode)
     *(CK_KEY_TYPE *) type_attr->pValue = CKK_DES3;
 
     template_update_attribute(tmpl, type_attr);
+    template_update_attribute(tmpl, value_attr);
+
+    return CKR_OK;
+}
+
+CK_RV des2_unwrap(STDLL_TokData_t *tokdata,
+                  TEMPLATE *tmpl,
+                  CK_BYTE *data,
+                  CK_ULONG data_len, CK_BBOOL fromend, CK_BBOOL isopaque)
+{
+    CK_ATTRIBUTE *value_attr = NULL;
+    CK_BYTE *ptr = NULL;
+    CK_ULONG i;
+
+
+    if (data_len < 2 * DES_BLOCK_SIZE) {
+        TRACE_ERROR("%s\n", ock_err(ERR_WRAPPED_KEY_INVALID));
+        return CKR_WRAPPED_KEY_INVALID;
+    }
+    if (fromend == TRUE) {
+        if (isopaque)
+            ptr = data + data_len;
+        else
+            ptr = data + data_len - (2 * DES_BLOCK_SIZE);
+    } else {
+        ptr = data;
+    }
+
+    if (isopaque) {
+        value_attr = (CK_ATTRIBUTE *) malloc(sizeof(CK_ATTRIBUTE) + data_len);
+    } else {
+        if (tokdata->nv_token_data->tweak_vector.check_des_parity == TRUE) {
+            for (i = 0; i < 2 * DES_KEY_SIZE; i++) {
+                if (parity_is_odd(ptr[i]) == FALSE) {
+                    TRACE_ERROR("%s\n", ock_err(ERR_ATTRIBUTE_VALUE_INVALID));
+                    return CKR_ATTRIBUTE_VALUE_INVALID;
+                }
+            }
+        }
+        value_attr =
+            (CK_ATTRIBUTE *) malloc(sizeof(CK_ATTRIBUTE) +
+                                    (2 * DES_BLOCK_SIZE));
+    }
+
+    if (!value_attr) {
+        TRACE_ERROR("%s\n", ock_err(ERR_HOST_MEMORY));
+        return CKR_HOST_MEMORY;
+    }
+
+    if (isopaque) {
+        value_attr->type = CKA_IBM_OPAQUE;
+        value_attr->ulValueLen = data_len;
+        value_attr->pValue = (CK_BYTE *) value_attr + sizeof(CK_ATTRIBUTE);
+        memcpy(value_attr->pValue, ptr, data_len);
+    } else {
+        value_attr->type = CKA_VALUE;
+        value_attr->ulValueLen = 2 * DES_BLOCK_SIZE;
+        value_attr->pValue = (CK_BYTE *) value_attr + sizeof(CK_ATTRIBUTE);
+        memcpy(value_attr->pValue, ptr, 2 * DES_BLOCK_SIZE);
+    }
+
     template_update_attribute(tmpl, value_attr);
 
     return CKR_OK;

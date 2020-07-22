@@ -2696,6 +2696,119 @@ CK_RV des3_cmac_verify_final(STDLL_TokData_t *tokdata,
 // mechanisms
 //
 
+//
+//
+CK_RV ckm_des2_key_gen(STDLL_TokData_t *tokdata, TEMPLATE *tmpl)
+{
+
+    CK_ATTRIBUTE *value_attr = NULL;
+    CK_ATTRIBUTE *opaque_attr = NULL;
+    CK_ATTRIBUTE *key_type_attr = NULL;
+    CK_ATTRIBUTE *class_attr = NULL;
+    CK_ATTRIBUTE *local_attr = NULL;
+    CK_BYTE *des_key = NULL;
+    CK_BYTE dummy_key[2 * DES_KEY_SIZE] = { 0, };
+    CK_ULONG rc;
+    CK_ULONG keysize;
+
+    if (token_specific.t_des_key_gen == NULL) {
+        TRACE_ERROR("%s\n", ock_err(ERR_MECHANISM_INVALID));
+        return CKR_MECHANISM_INVALID;
+    }
+
+    if (is_secure_key_token())
+        keysize = token_specific.token_keysize;
+    else
+        keysize = (2 * DES_KEY_SIZE);
+
+    if ((des_key = (CK_BYTE *) calloc(1, keysize)) == NULL) {
+        TRACE_ERROR("%s\n", ock_err(ERR_HOST_MEMORY));
+        return CKR_HOST_MEMORY;
+    }
+
+    rc = token_specific.t_des_key_gen(tokdata, des_key, keysize,
+                                      2 * DES_KEY_SIZE);
+    if (rc != CKR_OK)
+        goto err;
+
+    /* For secure-key keys put in CKA_IBM_OPAQUE
+     * and put dummy_key in CKA_VALUE.
+     */
+    if (is_secure_key_token()) {
+        opaque_attr = (CK_ATTRIBUTE *) malloc(sizeof(CK_ATTRIBUTE) + keysize);
+        if (!opaque_attr) {
+            TRACE_ERROR("%s\n", ock_err(ERR_HOST_MEMORY));
+            rc = CKR_HOST_MEMORY;
+            goto err;
+        }
+        opaque_attr->type = CKA_IBM_OPAQUE;
+        opaque_attr->ulValueLen = keysize;
+        opaque_attr->pValue = (CK_BYTE *) opaque_attr + sizeof(CK_ATTRIBUTE);
+        memcpy(opaque_attr->pValue, des_key, keysize);
+        template_update_attribute(tmpl, opaque_attr);
+    }
+
+    value_attr =
+        (CK_ATTRIBUTE *) malloc(sizeof(CK_ATTRIBUTE) + 2 * DES_KEY_SIZE);
+    key_type_attr =
+        (CK_ATTRIBUTE *) malloc(sizeof(CK_ATTRIBUTE) + sizeof(CK_KEY_TYPE));
+    class_attr =
+        (CK_ATTRIBUTE *) malloc(sizeof(CK_ATTRIBUTE) + sizeof(CK_OBJECT_CLASS));
+    local_attr =
+        (CK_ATTRIBUTE *) malloc(sizeof(CK_ATTRIBUTE) + sizeof(CK_BBOOL));
+
+    if (!value_attr || !key_type_attr || !class_attr || !local_attr) {
+        if (value_attr)
+            free(value_attr);
+        if (key_type_attr)
+            free(key_type_attr);
+        if (class_attr)
+            free(class_attr);
+        if (local_attr)
+            free(local_attr);
+
+        TRACE_ERROR("%s\n", ock_err(ERR_HOST_MEMORY));
+        rc = CKR_HOST_MEMORY;
+        goto err;
+    }
+
+    value_attr->type = CKA_VALUE;
+    value_attr->ulValueLen = 2 * DES_KEY_SIZE;
+    value_attr->pValue = (CK_BYTE *) value_attr + sizeof(CK_ATTRIBUTE);
+    if (is_secure_key_token())
+        memcpy(value_attr->pValue, dummy_key, 2 * DES_KEY_SIZE);
+    else
+        memcpy(value_attr->pValue, des_key, 2 * DES_KEY_SIZE);
+    free(des_key);
+
+    key_type_attr->type = CKA_KEY_TYPE;
+    key_type_attr->ulValueLen = sizeof(CK_KEY_TYPE);
+    key_type_attr->pValue = (CK_BYTE *) key_type_attr + sizeof(CK_ATTRIBUTE);
+    *(CK_KEY_TYPE *) key_type_attr->pValue = CKK_DES2;
+
+    class_attr->type = CKA_CLASS;
+    class_attr->ulValueLen = sizeof(CK_OBJECT_CLASS);
+    class_attr->pValue = (CK_BYTE *) class_attr + sizeof(CK_ATTRIBUTE);
+    *(CK_OBJECT_CLASS *) class_attr->pValue = CKO_SECRET_KEY;
+
+    local_attr->type = CKA_LOCAL;
+    local_attr->ulValueLen = sizeof(CK_BBOOL);
+    local_attr->pValue = (CK_BYTE *) local_attr + sizeof(CK_ATTRIBUTE);
+    *(CK_BBOOL *) local_attr->pValue = TRUE;
+
+    template_update_attribute(tmpl, value_attr);
+    template_update_attribute(tmpl, key_type_attr);
+    template_update_attribute(tmpl, class_attr);
+    template_update_attribute(tmpl, local_attr);
+
+    return CKR_OK;
+
+err:
+    if (des_key)
+        free(des_key);
+
+    return rc;
+}
 
 //
 //

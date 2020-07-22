@@ -2531,6 +2531,8 @@ CK_RV des_wrap_get_data(TEMPLATE *tmpl, CK_BBOOL length_only, CK_BYTE **data,
 // DES2 routines
 CK_RV des2_check_required_attributes(TEMPLATE *tmpl, CK_ULONG mode);
 CK_RV des2_set_default_attributes(TEMPLATE *tmpl, CK_ULONG mode);
+CK_RV des2_unwrap(STDLL_TokData_t *tokdata, TEMPLATE *tmpl, CK_BYTE *data,
+                  CK_ULONG data_len, CK_BBOOL fromend, CK_BBOOL isopaque);
 CK_RV des2_validate_attribute(STDLL_TokData_t *tokdata, TEMPLATE *tmpl,
                               CK_ATTRIBUTE *attr, CK_ULONG mode);
 
